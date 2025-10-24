@@ -1,33 +1,35 @@
-import zlib from 'zlib';
+// 动静分离
 import fs from 'fs';
+import http from 'http';
+import url from 'url';
+import path from 'path';
+import mime from 'mime';
 
-// 无损压缩 deflate/gzip
-const readStream = fs.createReadStream('input.txt');
-// fs.createWriteStream
-const writeStream = fs.createWriteStream('input.txt.deflate');
+const PORT = 80;
 
-// 创建压缩流 createDeflate
-const deflate = zlib.createDeflate();
+const server = http.createServer((req,res) => {
+    const { url, method } = req;
+    if (method === 'GET' && url.startsWith('/static')) {
+       const filePath = path.join(process.cwd(), url);
+       const mineType = mime.getType(filePath);
+       console.log('我走静态资源了', mineType);
+       fs.readFile(filePath, (err, data) => {
+           if (err) {
+               res.writeHead(404, {'Content-Type': 'text/plain'});
+               res.end('404 Not Found');
+               return;
+           }
+           console.log('我再走缓存')
+           res.writeHead(200,
+                {
+                    'Content-Type': mineType,
+                    'Cache-Control': 'public, max-age=86400'  // 缓存一天
+            });
+           res.end(data);
+       });
+    }
+})
 
-// 管道连接：读取 -> 压缩 -> 写入
-readStream.pipe(deflate).pipe(writeStream);
-
-writeStream.on('finish', () => {
-    console.log('文件已压缩完成');
+server.listen(PORT, () => {
+    console.log(`Server is running at http://localhost:${PORT}`);
 });
-
-// 解压deflate文件 createInflate
-const readStreamUnzip = fs.createReadStream('input.txt.deflate');
-const writeStreamUnzip = fs.createWriteStream('unziped_input.txt');
-const deflateUnzip = zlib.createInflate();
-
-readStreamUnzip.pipe(deflateUnzip).pipe(writeStreamUnzip);
-
-writeStreamUnzip.on('finish', () => {
-    console.log('文件已解压完成');
-});
-
-// 比较这段代码与 index_gzip.js 中的代码：
-// index_gzip.js 使用了 gzip 压缩和解压，而 index.js 使用了 deflate 压缩和解压。
-// 两者的实现方式类似，都是通过创建可读流、可写流和压缩/解压流，然后使用管道连接它们。
-// 唯一的区别在于使用的 zlib 方法不同：index_gzip.js 使用 createGzip 和 createUnzip，而 index.js 使用 createDeflate 和 createInflate。
